@@ -6,13 +6,15 @@ program MonteKarlo
     !Параметры системы.
     real, parameter :: av_t = 1.0 !Время свободного свободного пробега. ЗДЕСЬ СОВПАДАЕТ С ДЛИННОЙ, ТАК КАК СКОРОСТЬ ЧАСТИЦ = 1 У.Е. ИНАЧЕ РАБОТАТЬ БУДЕТ НЕКОРРЕКТНО.
     real, parameter :: pi = 3.14159265358979
-    real t
+    real t, t_sim
     real D !Коэффициент диффуции
     !Параметры симуляции
-    integer, parameter :: NumberOfParticles = 10
-    real, parameter :: MaxT = 10000.0 !Время в у.е. в течение которого проводится симуляция.
+    integer, parameter :: NumberOfParticles = 5
+    real, parameter :: MaxT = 1000.0 !Время в у.е. в течение которого проводится симуляция.
     !Счётчики.
     integer i, j
+    real(16) l_sum
+    integer(8) count
     !Создание типа ЧАСТИЦА.
     type particle
         real x  !Координаты .
@@ -25,7 +27,8 @@ program MonteKarlo
     type(particle) part
     !Вспомогательные.
     real l, temp
-    real dt
+    real tau
+    real, parameter :: dt = 0.1
     !Нужно для получения случаных чисел.
     call RANDOM_SEED()
     !Начальные параметры системы
@@ -43,31 +46,42 @@ program MonteKarlo
     !Считаем дистанцию, которую i-ая частица прошло за время Tmax.
     t = 0
     !Начальное состояние этой частицы.
-    part.x = 0.0; part.y = 0.0; part.z = 0.0;
-    part.vx = 1.0; part.vy = 0.0; part.vz = 0.0;
         
     !Считаем дистанцию, на которая одалится от начала координат i-ая частица за время MaxT.
     do while (t < MaxT)
-        dt = Get_Random_Time2Strike()
-        if (t + dt < MaxT) then
-            part.x = part.x + part.vx * dt
-            part.y = part.y + part.vy * dt
-            part.z = part.z + part.vz * dt
-            part = ConvertPart( part, Get_Random_CosTetha(), Get_Random_Phi() )
-        else
-            dt = (MaxT - t)
-            part.x = part.x + part.vx * dt
-            part.y = part.y + part.vy * dt
-            part.z = part.z + part.vz * dt
-        end if
-        t = t + dt
-        l = sqrt(part.x**2 + part.y**2 + part.z**2)
+        l_sum = 0
+        do i = 1,NumberOfParticles
+            t_sim = 0
+            part.x = 0.0; part.y = 0.0; part.z = 0.0;
+            part.vx = 1.0; part.vy = 0.0; part.vz = 0.0;
+            count = 0
+            do while (t_sim < t)
+                count = count + 1
+                tau = Get_Random_Time2Strike()
+                if (t_sim + tau < t) then
+                    part.x = part.x + part.vx * tau
+                    part.y = part.y + part.vy * tau
+                    part.z = part.z + part.vz * tau
+                    part = ConvertPart( part, Get_Random_CosTetha(), Get_Random_Phi() )
+                else
+                    tau = (t - t_sim)
+                    part.x = part.x + part.vx * tau
+                    part.y = part.y + part.vy * tau
+                    part.z = part.z + part.vz * tau
+                end if
+                t_sim = t_sim + tau
+            end do
+            l = sqrt(part.x**2 + part.y**2 + part.z**2)
+            l_sum = l_sum + l
+            write(1,*) sqrt(part.vx**2 + part.vy**2 + part.vz**2)
+        end do
+        l = l_sum / NumberOfParticles
         logic = LineTo_w( DBLE(t), DBLE(l) )
-        write(1,*) t, " ", sqrt(part.vx**2 + part.vy**2 + part.vz**2)
+        !write(1,*) t, " ", l
+        t = t + dt
     end do
     
     t = 0
-    dt = 0.1
     call MoveTo_w(DBLE(0.0), DBLE(0.0), wxy); logic = SetColor(1);
     do while (t < MaxT)
         t = t + dt
@@ -118,7 +132,7 @@ program MonteKarlo
     subroutine GraphicAxes()
         real xl, yl, xr, yr, scale_width
         real x, y
-        xl = -0.1; yl = -0.1; xr = MaxT; yr = 100.0; scale_width = 0.1 !Обязательно должны содержать начало координат.
+        xl = -0.1; yl = -0.1; xr = MaxT; yr = 70.0; scale_width = 0.1 !Обязательно должны содержать начало координат.
         bool2 = SetWindow(.TRUE., DBLE(xl), DBLE(yl), DBLE(xr), DBLE(yr))
         x = xl
         do while (ceiling(x) <= floor(xr)) !Градуировка шкалы абсцисс.
