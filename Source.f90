@@ -3,22 +3,21 @@ program MonteKarlo
     use dflib
     type (wxycoord) wxy
     integer(2) logic
+    !Для получения случаных чисел из файла.
+    integer, parameter :: LastRandomNumber = 2400
+    integer CurrentRandomNumber
     !Параметры системы.
     real, parameter :: av_t = 1.0 !Время свободного свободного пробега. ЗДЕСЬ СОВПАДАЕТ С ДЛИННОЙ, ТАК КАК СКОРОСТЬ ЧАСТИЦ = 1 У.Е. ИНАЧЕ РАБОТАТЬ БУДЕТ НЕКОРРЕКТНО.
     real, parameter :: pi = 3.14159265358979
     real t, t_sim
     real D !Коэффициент диффуции
     !Параметры симуляции
-    integer, parameter :: MaxK = 100
-    integer, parameter :: NumberOfParticles = 5
+    integer, parameter :: NumberOfParticles = 100
     real, parameter :: MaxT = 100.0 !Время в у.е. в течение которого проводится симуляция.
-    integer, parameter :: K_left = 1000
-    integer, parameter :: K_right = 1100
     !Счётчики.
     integer i, j
     real(16) l_sum
     integer(8) count
-    integer K
     !Создание типа ЧАСТИЦА.
     type particle
         real x  !Координаты .
@@ -29,7 +28,6 @@ program MonteKarlo
         real(16) vz
     end type particle
     type(particle) part
-    type(particle) particles(MaxK)
     !Вспомогательные.
     real l, temp
     real tau
@@ -41,6 +39,8 @@ program MonteKarlo
     !Создание графического окна и прорисовка в нём окна с графиком.
     call GraphicWindow()
     call GraphicAxes()
+    !Осуществление получения случайных чисел из файла.
+    CurrentRandomNumber = 1; open(2,file = "RandomNumbers.txt")
     !Открываем файл для записи необходимых данных.
     open(1, file= "out.txt")
     
@@ -49,47 +49,42 @@ program MonteKarlo
     call RANDOM_SEED()
     
     !Считаем дистанцию, которую i-ая частица прошло за время Tmax.
-    
+    t = 0
     !Начальное состояние этой частицы.
         
     !Считаем дистанцию, на которая одалится от начала координат i-ая частица за время MaxT.
-    do K = K_left,K_right
-        t = 0
-        do while (t < MaxT)
-            l_sum = 0
-            do i = 1,K
-                t_sim = 0
-                part.x = 0.0; part.y = 0.0; part.z = 0.0;
-                part.vx = 1.0; part.vy = 0.0; part.vz = 0.0;
-                count = 0
-                do while (t_sim < t)
-                    count = count + 1
-                    tau = Get_Random_Time2Strike()
-                    if (t_sim + tau < t) then
-                        part.x = part.x + part.vx * tau
-                        part.y = part.y + part.vy * tau
-                        part.z = part.z + part.vz * tau
-                        part = ConvertPart( part, Get_Random_CosTetha(), Get_Random_Phi() )
-                    else
-                        tau = (t - t_sim)
-                        part.x = part.x + part.vx * tau
-                        part.y = part.y + part.vy * tau
-                        part.z = part.z + part.vz * tau
-                    end if
-                    t_sim = t_sim + tau
-                end do
-                l = sqrt(part.x**2 + part.y**2 + part.z**2)
-                l_sum = l_sum + l
+    do while (t < MaxT)
+        l_sum = 0
+        do i = 1,NumberOfParticles
+            t_sim = 0
+            part.x = 0.0; part.y = 0.0; part.z = 0.0;
+            part.vx = 1.0; part.vy = 0.0; part.vz = 0.0;
+            count = 0
+            do while (t_sim < t)
+                count = count + 1
+                tau = Get_Random_Time2Strike()
+                if (t_sim + tau < t) then
+                    part.x = part.x + part.vx * tau
+                    part.y = part.y + part.vy * tau
+                    part.z = part.z + part.vz * tau
+                    part = ConvertPart( part, Get_Random_CosTetha(), Get_Random_Phi() )
+                else
+                    tau = (t - t_sim)
+                    part.x = part.x + part.vx * tau
+                    part.y = part.y + part.vy * tau
+                    part.z = part.z + part.vz * tau
+                end if
+                t_sim = t_sim + tau
             end do
-            l = l_sum / K
-            t = t + dt
-            if (t >= MaxT) then
-                logic = LineTo_w( DBLE(K), abs( DBLE(l) - sqrt(6*D*MaxT) ) )
-                write(1,*) K, " ", abs( DBLE(l) - sqrt(6*D*MaxT) )
-            end if
+            l = sqrt(part.x**2 + part.y**2 + part.z**2)
+            l_sum = l_sum + l
         end do
+        l = l_sum / NumberOfParticles
+        logic = LineTo_w( DBLE(t), DBLE(l) )
+        write(1,*) t, " ", l
+        t = t + dt
     end do
-        
+    
     t = 0
     call MoveTo_w(DBLE(0.0), DBLE(0.0), wxy); logic = SetColor(1);
     do while (t < MaxT)
@@ -98,24 +93,25 @@ program MonteKarlo
     end do
 
     close(1)
+    close(2)
     
     contains
     
     real function Get_Random_Time2Strike() !Получание случайного времени пробега частицы.
         real r
-        call RANDOM_NUMBER(r)
+        r = GetRandomNumberFromFile()
         Get_Random_Time2Strike = -av_t * log( 1 - r )
     end function Get_Random_Time2Strike
     
     real function Get_Random_CosTetha()    !Получение угла в плоскости соударения частиц.
         real r
-        call RANDOM_NUMBER(r)
+        r = GetRandomNumberFromFile()
         Get_Random_CosTetha = 1 - 2 * r
     end function Get_Random_CosTetha
     
     real function Get_Random_Phi()      !Получаение угла в плоскости перпенддикулярной линии соударения частиц.
         real r
-        call RANDOM_NUMBER(r)
+        r = GetRandomNumberFromFile()
         Get_Random_Phi = 2 * pi * r
     end function Get_Random_Phi
     
@@ -141,7 +137,7 @@ program MonteKarlo
     subroutine GraphicAxes()
         real xl, yl, xr, yr, scale_width
         real x, y
-        xl = DBLE(K_left); yl = -0.1; xr = DBLE(K_right); yr = 5.0; scale_width = 0.1 !Обязательно должны содержать начало координат.
+        xl = -0.1; yl = -0.1; xr = MaxT; yr = 70.0; scale_width = 0.1 !Обязательно должны содержать начало координат.
         bool2 = SetWindow(.TRUE., DBLE(xl), DBLE(yl), DBLE(xr), DBLE(yr))
         x = xl
         do while (ceiling(x) <= floor(xr)) !Градуировка шкалы абсцисс.
@@ -161,5 +157,17 @@ program MonteKarlo
         call MoveTo_w(DBLE(0.0), DBLE(yl), wxy)
         bool2 = LineTo_w(DBLE(0.0), DBLE(yr))
     end subroutine GraphicAxes
+    
+    real function GetRandomNumberFromFile()
+        real r
+        read(2,*) r
+        CurrentRandomNumber = CurrentRandomNumber + 1
+        if (CurrentRandomNumber > LastRandomNumber) then
+            CurrentRandomNumber = 1
+            close(2)
+            open(2,file = "RandomNumbers.txt")
+        end if
+        GetRandomNumberFromFile = r
+    end function GetRandomNumberFromFile
     
 end
